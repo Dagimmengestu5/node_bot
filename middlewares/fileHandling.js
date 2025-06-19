@@ -23,58 +23,72 @@
 //};
 
 
-// middlewares/fileHandling.js
 const path = require('path');
 const fs = require('fs');
 
-// --- CRITICAL CONFIGURATION ---
-// This MUST point to the absolute path of your content files (audio, pdf, images, etc.)
-// Adjust 'YOUR_ACTUAL_FILES_FOLDER' to match your project structure.
-// Example: If your project root is `/home/user/my_project/`
-// and your files are in `/home/user/my_project/content/`, then it might be:
-// const FILES_BASE_DIR = path.join(__dirname, '..', '..', 'content');
-// Or if 'backend' is directly in the project root and files are in 'files' next to 'backend':
-// const FILES_BASE_DIR = path.join(__dirname, '..', 'files');
 const FILES_BASE_DIR = path.join(__dirname, '../data/MekaneHeywetFiles');
 
-// Ensure the base directory exists
 if (!fs.existsSync(FILES_BASE_DIR)) {
     console.error(`ERROR: FILES_BASE_DIR does not exist: ${FILES_BASE_DIR}`);
     console.error('Please create this directory or update the path in middlewares/fileHandling.js');
-    process.exit(1); // Exit if the base directory is not found
+    process.exit(1);
+}
+
+// Natural sort comparator for filenames
+function naturalCompare(a, b) {
+  const ax = [], bx = [];
+
+  a.replace(/(\d+)|(\D+)/g, (_, $1, $2) => {
+    ax.push([$1 !== undefined ? parseInt($1, 10) : Infinity, $2 || ""]);
+  });
+  b.replace(/(\d+)|(\D+)/g, (_, $1, $2) => {
+    bx.push([$1 !== undefined ? parseInt($1, 10) : Infinity, $2 || ""]);
+  });
+
+  while (ax.length && bx.length) {
+    const an = ax.shift();
+    const bn = bx.shift();
+
+    const numDiff = an[0] - bn[0];
+    if (numDiff !== 0) return numDiff;
+
+    const strDiff = an[1].localeCompare(bn[1]);
+    if (strDiff !== 0) return strDiff;
+  }
+
+  return ax.length - bx.length;
 }
 
 module.exports = (req, res, next) => {
-    /**
-     * Safely resolves a user-provided relative path to an absolute path within FILES_BASE_DIR.
-     * Prevents directory traversal attacks.
-     *
-     * @param {string} relativePath - The path provided by the client (e.g., 'folder/file.pdf').
-     * @returns {string | null} The absolute, resolved path if safe, otherwise null.
-     */
-    res.locals.getSafePath = (relativePath) => {
-        if (!relativePath) {
-            return FILES_BASE_DIR; // If no path, refers to the root content directory
-        }
+  res.locals.getSafePath = (relativePath) => {
+    if (!relativePath) {
+      return FILES_BASE_DIR;
+    }
 
-        // Normalize the path to handle sequences like 'folder/./file' or 'folder/../file'
-        const normalizedPath = path.normalize(relativePath);
+    const normalizedPath = path.normalize(relativePath);
+    const absolutePath = path.join(FILES_BASE_DIR, normalizedPath);
 
-        // Construct the absolute path
-        const absolutePath = path.join(FILES_BASE_DIR, normalizedPath);
+    if (!absolutePath.startsWith(FILES_BASE_DIR + path.sep) && absolutePath !== FILES_BASE_DIR) {
+      console.warn(`Attempted directory traversal detected for path: ${relativePath}`);
+      return null;
+    }
 
-        // Crucial security check: Ensure the resolved path is still within the base directory
-        // This prevents directory traversal attacks like ../../../etc/passwd
-        // It also handles cases where `normalizedPath` might be '..' or '.'
-        if (!absolutePath.startsWith(FILES_BASE_DIR + path.sep) && absolutePath !== FILES_BASE_DIR) {
-            console.warn(`Attempted directory traversal detected for path: ${relativePath}`);
-            return null; // Path is outside the allowed directory
-        }
+    return absolutePath;
+  };
 
-        return absolutePath;
-    };
-    next();
+  next();
 };
 
-// Export the base directory so routes can use it directly for operations like `readdir`
+// Helper to list directory contents naturally sorted
+module.exports.listDirSorted = function(dirPath, callback) {
+  fs.readdir(dirPath, (err, files) => {
+    if (err) {
+      return callback(err);
+    }
+
+    files.sort(naturalCompare);
+    callback(null, files);
+  });
+};
+
 module.exports.FILES_BASE_DIR = FILES_BASE_DIR;
