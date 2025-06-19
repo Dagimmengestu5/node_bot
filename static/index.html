@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mekane Heywet File Browser</title>
+    <title>Mekane Heywet</title>
+    <link rel="icon" type="image/x-icon" href="logo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -327,7 +328,7 @@
 
     .file-name {
         font-size: 14px; /* Smaller font */
-        max-width: 120px; /* Limit width */
+        max-width: 160px; /* Limit width */
         overflow: hidden;
         text-overflow: ellipsis;
     }
@@ -373,6 +374,13 @@
         text-overflow: ellipsis;
         vertical-align: bottom;
     }
+
+    .copyright-footer {
+        margin-top: 20px;
+        padding: 15px 0;
+        font-size: 12px;
+    }
+
 }
 
         /* Animation for file items */
@@ -451,12 +459,32 @@
             text-align: center;
             color: var(--text-light);
         }
+        /* Copyright footer styles */
+.copyright-footer {
+    text-align: center;
+    margin-top: 0px;
+    padding: 15px 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.copyright-footer a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.copyright-footer a:hover {
+    color: #a0d4f8;
+    text-decoration: underline;
+}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header-group">
-            <h1>መካነሕይወት አብነት ትምሕርት</h1>
+            <h1>መካነ ሕይወት አብነት ትምሕርት</h1>
             <img src="logo.png" alt="Mekane Heywet Logo" class="circle-logo">
         </div>
 
@@ -471,7 +499,7 @@
 
         <div id="fileBrowser" class="file-browser">
             <div class="breadcrumb" id="breadcrumb">
-                <a href="#" class="go-to-root">Root</a>
+                <a href="#" class="go-to-root"></a>
             </div>
 
             <div id="loadingIndicator" class="loading" style="display: none;">
@@ -498,7 +526,11 @@
             <div id="modalContent"></div>
         </div>
     </div>
-
+<div class="copyright-footer">
+    &copy; <span id="copyright-year"></span> Mekane Hiwot. All Rights Reserved.
+    <!-- Optional: Add more links if needed -->
+    <!-- <br><a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a> -->
+</div>
     <script>
         // DOM Elements
         const authSection = document.getElementById('authSection');
@@ -517,38 +549,64 @@
         const closeModal = document.querySelector('.close-modal');
 
         // State management
-        let currentPath = [];
+         let currentPath = [];
         let currentPreviewBlobUrl = null; // To keep track of Blob URL for revocation
+        let isPdfModalOpen = false;
 
         // Event Listeners
-        document.getElementById('loginButton').addEventListener('click', async () => {
-            const password = document.getElementById('passwordInput').value.trim();
-            if (!password) return;
+document.getElementById('loginButton').addEventListener('click', handleLogin);
+document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        handleLogin();
+    }
+});
+// Handle back button for mobile PDF viewer
+window.addEventListener('popstate', (event) => {
+    if (isPdfModalOpen && isMobileDevice()) {
+        closeMobilePdfViewer();
+    }
+});
 
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
-                });
+function closeMobilePdfViewer() {
+    isPdfModalOpen = false;
+    previewModal.style.display = 'none';
+    if (currentPreviewBlobUrl) {
+        URL.revokeObjectURL(currentPreviewBlobUrl);
+        currentPreviewBlobUrl = null;
+    }
+}
 
-                const data = await res.json();
+// Mobile detection helper
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+async function handleLogin() {
+    const password = document.getElementById('passwordInput').value.trim();
+    if (!password) return;
 
-                if (data.success) {
-                    document.getElementById('authSection').style.display = 'none';
-                    document.getElementById('fileBrowser').style.display = 'block';
-                    loadFolderContents('');
-                } else {
-                    document.getElementById('errorMessage').textContent = data.error || 'Login failed';
-                    document.getElementById('errorMessage').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Login error:', error);
-                document.getElementById('errorMessage').textContent = 'Network error or server unavailable.';
-                document.getElementById('errorMessage').style.display = 'block';
-            }
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
         });
 
+        const data = await res.json();
+
+        if (data.success) {
+            document.getElementById('authSection').style.display = 'none';
+            document.getElementById('fileBrowser').style.display = 'block';
+            loadFolderContents('');
+        } else {
+            document.getElementById('errorMessage').textContent = data.error || 'Login failed';
+            document.getElementById('errorMessage').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        document.getElementById('errorMessage').textContent = 'Network error or server unavailable.';
+        document.getElementById('errorMessage').style.display = 'block';
+    }
+}
         closeModal.addEventListener('click', () => {
             previewModal.style.display = 'none';
             // Revoke the Blob URL when modal closes to free memory
@@ -726,7 +784,7 @@
                 <i class="file-icon fas fa-folder"></i>
                 <div class="file-info">
                     <div class="file-name" style="font-weight: bold; color: #b0b0b0;">${folderName}</div>
-                    <div class="file-details">Folder</div>
+                    <div class="file-details"></div>
                 </div>
             `;
 
@@ -986,7 +1044,7 @@
             const rootLink = document.createElement('a');
             rootLink.href = '#';
             rootLink.className = 'go-to-root';
-            rootLink.innerHTML = '<i class="fas fa-home"></i> Root';
+            rootLink.innerHTML = '<i class="fas fa-home"></i>';
             rootLink.addEventListener('click', (e) => {
                 e.preventDefault();
                 loadFolderContents('');
@@ -1101,6 +1159,8 @@
         }
 
         window.downloadFile = downloadFile;
+        // Set copyright year automatically
+document.getElementById('copyright-year').textContent = new Date().getFullYear();
     </script>
 </body>
 </html>
