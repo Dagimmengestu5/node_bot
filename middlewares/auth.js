@@ -1,87 +1,80 @@
-//module.exports = function(req, res, next) {
-//    const validPasswords = [
-//        "dagi", "Dagi", "mekane heywet", "mekaneheywet",
-//        "Mekane heywet", "Mekane Heywet", "MEKANE HEYWET",
-//        "መካነ ሕይወት", "መካነ ህይወት", "መካነሕይወት", "2017"
-//    ];
+//const path = require('path');
+//const fs = require('fs');
 //
-//    // Skip auth for static files and login route
-//    if (req.path.startsWith('/static/') || req.path === '/api/login') {
-//        return next();
-//    }
+//module.exports = function (req, res, next) {
+//    const baseDir = path.join(__dirname, '../../data/MekaneHeywetFiles');
+//    console.log('Base dir:', baseDir);
 //
-//    const authToken = req.cookies?.auth_token;
+//    res.locals.getSafePath = (requestedPath) => {
+//        if (!requestedPath) return baseDir;
 //
-//    if (validPasswords.includes(authToken)) {
-//        return next();
-//    }
+//        requestedPath = requestedPath.replace(/^\//, '');
+//        const fullPath = path.join(baseDir, requestedPath);
+//        const normalizedPath = path.normalize(fullPath);
 //
-//    if (req.path.startsWith('/api')) {
-//        return res.status(401).json({ error: 'Unauthorized' });
-//    } else {
-//        return res.redirect('/?authError=1');
-//    }
+//        if (!normalizedPath.startsWith(path.resolve(baseDir))) {
+//            return null;
+//        }
+//
+//        return normalizedPath;
+//    };
+//
+//    next();
 //};
 
 
-// middlewares/auth.js
-const jwt = require('jsonwebtoken'); // You'd typically use JWT for sessions. (npm install jsonwebtoken)
-                                    // For this simple example, we'll just use a direct session check.
+// middlewares/fileHandling.js
+const path = require('path');
+const fs = require('fs');
 
-// In a real app, this would be retrieved securely (e.g., from environment variables)
-const SECRET_PASSWORD = [
-       "dagi", "Dagi", "mekane heywet", "mekaneheywet",
-      "Mekane heywet", "Mekane Heywet", "MEKANE HEYWET",
-        "መካነ ሕይወት", "መካነ ህይወት", "መካነሕይወት", "2017"
-    ]; // <-- CHANGE THIS! MAKE IT A STRONG SECRET!
-const SESSION_COOKIE_NAME = 'auth_token';
+// --- CRITICAL CONFIGURATION ---
+// This MUST point to the absolute path of your content files (audio, pdf, images, etc.)
+// Adjust 'YOUR_ACTUAL_FILES_FOLDER' to match your project structure.
+// Example: If your project root is `/home/user/my_project/`
+// and your files are in `/home/user/my_project/content/`, then it might be:
+// const FILES_BASE_DIR = path.join(__dirname, '..', '..', 'content');
+// Or if 'backend' is directly in the project root and files are in 'files' next to 'backend':
+// const FILES_BASE_DIR = path.join(__dirname, '..', 'files');
+const FILES_BASE_DIR = path.join(__dirname, '../data/MekaneHeywetFiles');
 
-// Define cookie options for reuse
-// For local development (HTTP), 'secure' should be false.
-// 'SameSite' should also be explicitly set for cross-site cookie behavior if needed,
-// but for simple cases, 'Lax' or 'None' (with secure: true)
-// `path: '/'` ensures the cookie is available across your entire domain.
-const cookieOptions = {
-    httpOnly: true, // Prevents client-side JavaScript from accessing the cookie
-    secure: process.env.NODE_ENV === 'production', // true in production (HTTPS), false in development (HTTP)
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds (adjust as needed)
-    sameSite: 'Lax', // Protects against some CSRF attacks; 'Strict' is more secure but can be restrictive
-    path: '/' // Make cookie available to all paths on your domain
-};
+// Ensure the base directory exists
+if (!fs.existsSync(FILES_BASE_DIR)) {
+    console.error(`ERROR: FILES_BASE_DIR does not exist: ${FILES_BASE_DIR}`);
+    console.error('Please create this directory or update the path in middlewares/fileHandling.js');
+    process.exit(1); // Exit if the base directory is not found
+}
 
-const authMiddleware = (req, res, next) => {
-    // Exclude login and check-auth routes from direct authentication check
-    // as they handle authentication themselves.
-    if (req.path === '/api/login' || req.path === '/api/check-auth') {
-        return next();
-    }
-
-    const token = req.cookies[SESSION_COOKIE_NAME];
-
-    if (!token) {
-        // If no token, and not trying to login, redirect to login or send 401
-        if (req.accepts('html') && !req.path.startsWith('/api')) {
-             // For HTML requests, redirect to root which should show login page
-            return res.redirect('/');
-        } else {
-             // For API requests, send 401 Unauthorized
-            return res.status(401).json({ error: 'Unauthorized: No token provided.' });
+module.exports = (req, res, next) => {
+    /**
+     * Safely resolves a user-provided relative path to an absolute path within FILES_BASE_DIR.
+     * Prevents directory traversal attacks.
+     *
+     * @param {string} relativePath - The path provided by the client (e.g., 'folder/file.pdf').
+     * @returns {string | null} The absolute, resolved path if safe, otherwise null.
+     */
+    res.locals.getSafePath = (relativePath) => {
+        if (!relativePath) {
+            return FILES_BASE_DIR; // If no path, refers to the root content directory
         }
-    }
 
-    // In a real app, you would verify a JWT token here.
-    // For this example, we'll just check if *any* token exists and is 'loggedIn'.
-    // This is a VERY BASIC and INSECURE check for demonstration.
-    // Replace with proper token validation (e.g., `jwt.verify(token, process.env.JWT_SECRET)`)!
-    if (token === 'loggedIn') { // Simple check for our 'loggedIn' string
-        next();
-    } else {
-        res.clearCookie(SESSION_COOKIE_NAME); // Clear invalid cookie
-        return res.status(401).json({ error: 'Unauthorized: Invalid token.' });
-    }
+        // Normalize the path to handle sequences like 'folder/./file' or 'folder/../file'
+        const normalizedPath = path.normalize(relativePath);
+
+        // Construct the absolute path
+        const absolutePath = path.join(FILES_BASE_DIR, normalizedPath);
+
+        // Crucial security check: Ensure the resolved path is still within the base directory
+        // This prevents directory traversal attacks like ../../../etc/passwd
+        // It also handles cases where `normalizedPath` might be '..' or '.'
+        if (!absolutePath.startsWith(FILES_BASE_DIR + path.sep) && absolutePath !== FILES_BASE_DIR) {
+            console.warn(`Attempted directory traversal detected for path: ${relativePath}`);
+            return null; // Path is outside the allowed directory
+        }
+
+        return absolutePath;
+    };
+    next();
 };
 
-module.exports = authMiddleware;
-module.exports.SECRET_PASSWORD = SECRET_PASSWORD;
-module.exports.SESSION_COOKIE_NAME = SESSION_COOKIE_NAME;
-module.exports.cookieOptions = cookieOptions; // Export the cookie options
+// Export the base directory so routes can use it directly for operations like `readdir`
+module.exports.FILES_BASE_DIR = FILES_BASE_DIR;
