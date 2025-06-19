@@ -138,10 +138,7 @@ router.get('/check-auth', (req, res) => {
 
 // GET /api/list (List files and folders)
 router.get('/list', async (req, res) => {
-    // req.query.path comes from frontend, e.g., 'folder/subfolder' or '' for root
     const requestedPath = req.query.path || '';
-
-    // Use getSafePath from the middleware to resolve the path securely
     const absolutePath = res.locals.getSafePath(requestedPath);
 
     if (!absolutePath) {
@@ -150,21 +147,18 @@ router.get('/list', async (req, res) => {
 
     try {
         const stats = await fs.promises.stat(absolutePath);
-
         if (!stats.isDirectory()) {
             return res.status(400).json({ error: 'Path is not a directory.' });
         }
-
         const items = await getDirectoryContents(absolutePath);
+        items.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         res.json(items);
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            return res.status(404).json({ error: 'Directory not found.' });
-        }
-        console.error('Error listing directory:', error);
+    } catch (err) {
+        console.error('Error listing directory:', err);
         res.status(500).json({ error: 'Failed to list directory contents.' });
     }
 });
+
 
 // GET /api/view (Preview files)
 router.get('/view', (req, res) => {
