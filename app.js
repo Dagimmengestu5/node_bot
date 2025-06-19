@@ -3,30 +3,40 @@ const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 
-// Import your custom middlewares
 const authMiddleware = require('./middlewares/auth');
-const fileHandlingMiddleware = require('./middlewares/fileHandling'); // Renamed for clarity
+const fileHandlingMiddleware = require('./middlewares/fileHandling');
 
 const app = express();
-const PORT = 4000;
+
+// ✅ Use the cPanel-assigned port
+const PORT = process.env.PORT || 3001;
 
 // === Middlewares ===
-app.use(cookieParser()); // 1. Parse cookies
-app.use(express.json()); // 2. Parse JSON bodies (for login, etc.)
-
+app.use(cookieParser());
+app.use(express.json());
 app.use(fileHandlingMiddleware);
 
-app.use(express.static(path.join(__dirname, '..', 'static')));
+// ✅ Serve static files
+app.use(express.static(path.join(__dirname, 'static')));
 
-
-app.use(authMiddleware);
-
-app.use('/api', require('./routes/api'));
-
-
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
+// ✅ Optional: Basic root route to avoid redirect loops
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'static', 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// ✅ Apply authentication after public files
+app.use(authMiddleware);
+
+// ✅ API routes
+app.use('/api', require('./routes/api'));
+
+// ✅ Error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send(`<pre>${err.stack}</pre>`);
+});
+
+// ✅ Start app using correct port for cPanel
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
