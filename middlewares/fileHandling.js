@@ -35,7 +35,7 @@ const fs = require('fs');
 // const FILES_BASE_DIR = path.join(__dirname, '..', '..', 'content');
 // Or if 'backend' is directly in the project root and files are in 'files' next to 'backend':
 // const FILES_BASE_DIR = path.join(__dirname, '..', 'files');
-const FILES_BASE_DIR = path.join(__dirname, '../../data/MekaneHeywetFiles');
+const FILES_BASE_DIR = path.join(__dirname, '../data/MekaneHeywetFiles');
 
 // Ensure the base directory exists
 if (!fs.existsSync(FILES_BASE_DIR)) {
